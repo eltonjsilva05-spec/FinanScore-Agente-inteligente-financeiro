@@ -91,9 +91,9 @@ else:
     # Buscar informações de plano atualizadas direto do Banco de Dados
     plano_atual = obter_plano_usuario(nome)
     eh_admin = (plano_atual == "Admin")
-    eh_premium = plano_atual in ["Mensal", "Anual"] or eh_admin
+    eh_premium = plano_atual in ["Mensal", "Anual", "Admin"] # Correção para incluir Admin no fluxo premium de forma explícita
 
-    # --- BARRA LATERAL (SIDEBAR ATUALIZADA COM CHECKOUT REAL) ---
+    # --- BARRA LATERAL (SIDEBAR COM REDIRECIONAMENTO KIWIFY) ---
     with st.sidebar:
         st.markdown(f"### 👤 Olá, \n## {nome}")
         
@@ -106,21 +106,44 @@ else:
         
         st.divider()
         
-        # Bloqueio comercial com Link Comercial Direto da Kiwify
+        # Bloqueio comercial com Links Diretos da Kiwify para os 3 Planos reais
         if not eh_premium:
             st.warning("Ganhe acesso às ferramentas de Caixa Reserva e Gestão de Contas Bancárias Corporativas.")
+            st.markdown("<p style='font-weight: 600; margin-bottom: 5px; font-size: 14px;'>Escolha o seu plano para liberar:</p>", unsafe_allow_html=True)
             
-            # TODO: Substitua o texto abaixo pelo link gerado na sua conta Kiwify
-            link_kiwify = "SEU_LINK_DA_KIWIFY_AQUI"
-            
+            # --- PLANO MENSAL ---
+            link_mensal = "https://pay.kiwify.com.br/HP7f4nD"
             st.markdown(
-                f'<a href="{link_kiwify}" target="_blank" style="text-decoration: none;">'
-                '<button style="width: 100%; background-color: #2ecc71; color: black; border: none; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.3s; text-align: center;">'
-                'Fazer Upgrade para Premium 🚀'
+                f'<a href="{link_mensal}" target="_blank" style="text-decoration: none;">'
+                '<button style="width: 100%; background-color: #374151; color: white; border: 1px solid #4b5563; padding: 8px; font-weight: 500; border-radius: 8px; cursor: pointer; margin-bottom: 8px; text-align: center;">'
+                'Plano Mensal - R$ 29,90/mês 💳'
                 '</button>'
                 '</a>', 
                 unsafe_allow_html=True
             )
+            
+            # --- PLANO SEMESTRAL (6 MESES) ---
+            link_semestral = "https://pay.kiwify.com.br/Xx33BV9"
+            st.markdown(
+                f'<a href="{link_semestral}" target="_blank" style="text-decoration: none;">'
+                '<button style="width: 100%; background-color: #3b82f6; color: white; border: none; padding: 8px; font-weight: 500; border-radius: 8px; cursor: pointer; margin-bottom: 8px; text-align: center;">'
+                'Plano Semestral - R$ 119,00 🚀'
+                '</button>'
+                '</a>', 
+                unsafe_allow_html=True
+            )
+            
+            # --- PLANO ANUAL ---
+            link_anual = "https://pay.kiwify.com.br/EoIhPpa"
+            st.markdown(
+                f'<a href="{link_anual}" target="_blank" style="text-decoration: none;">'
+                '<button style="width: 100%; background-color: #2ecc71; color: black; border: none; padding: 10px; font-weight: 700; border-radius: 8px; cursor: pointer; text-align: center;">'
+                'Plano Anual - R$ 197,00 🔥'
+                '</button>'
+                '</a>', 
+                unsafe_allow_html=True
+            )
+            
         elif eh_premium and not eh_admin:
             st.caption(f"Sua assinatura do plano {plano_atual} está ativa e renovada.")
                 
@@ -200,7 +223,7 @@ else:
             n_res = st.number_input("Adicionar Valor de Aporte à Reserva:", value=float(v_res))
             if st.button("Confirmar Atualização de Reserva", type="primary"):
                 atualizar_valor_inicial_reserva(nome, n_res)
-                st.success("Reserva updated com sucesso!")
+                st.success("Reserva atualizada com sucesso!")
                 st.rerun()
 
     # --- ABA 3: BANCOS DOS CLIENTES ---
