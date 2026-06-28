@@ -18,13 +18,19 @@ if "logado" not in st.session_state or not st.session_state["logado"]:
 
 # Extração do nome de forma segura
 usuario_obj = st.session_state.get("usuario")
-nome_usuario = usuario_obj["nome"] if isinstance(usuario_obj, dict) else str(usuario_obj)
+
+# CORREÇÃO DA CHAVE: Ajustado para buscar 'username' ou 'nome' de forma resiliente
+if isinstance(usuario_obj, dict):
+    nome_usuario = usuario_obj.get("username", usuario_obj.get("nome", "admin"))
+else:
+    nome_usuario = str(usuario_obj)
 
 # ==============================================================================
 # HIGIENIZAÇÃO DE DADOS
 # ==============================================================================
-receitas = float(soma_receitas_usuario(usuario_obj) or 0.0)
-despesas = float(soma_despesas_usuario(usuario_obj) or 0.0)
+# CORREÇÃO DO PARAMÊTRO: Trocado 'usuario_obj' por 'nome_usuario' (string pura)
+receitas = float(soma_receitas_usuario(nome_usuario) or 0.0)
+despesas = float(soma_despesas_usuario(nome_usuario) or 0.0)
 saldo = receitas - despesas
 
 resumo = gerar_resumo(receitas, despesas)

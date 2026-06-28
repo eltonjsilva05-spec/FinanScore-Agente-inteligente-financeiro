@@ -21,13 +21,19 @@ st.title("📄 Relatório Mensal em PDF")
 st.caption("Exporte o consolidado da sua saúde financeira.")
 
 usuario_obj = st.session_state.get("usuario")
-nome_usuario = usuario_obj["nome"] if isinstance(usuario_obj, dict) else str(usuario_obj)
+
+# CORREÇÃO CRÍTICA: Garante o texto puro do username (evita o erro de 'dict')
+if isinstance(usuario_obj, dict):
+    nome_usuario = usuario_obj.get("username", usuario_obj.get("nome", "admin"))
+else:
+    nome_usuario = str(usuario_obj)
 
 # ==============================================================================
 # LEITURA E HIGIENIZAÇÃO
 # ==============================================================================
-receitas = float(soma_receitas_usuario(usuario_obj) or 0.0)
-despesas = float(soma_despesas_usuario(usuario_obj) or 0.0)
+# CORREÇÃO DE PARÂMETRO: Alterado de 'usuario_obj' para 'nome_usuario' (string pura)
+receitas = float(soma_receitas_usuario(nome_usuario) or 0.0)
+despesas = float(soma_despesas_usuario(nome_usuario) or 0.0)
 saldo = receitas - despesas
 
 col1, col2, col3 = st.columns(3)
