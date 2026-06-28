@@ -93,7 +93,7 @@ else:
     eh_admin = (plano_atual == "Admin")
     eh_premium = plano_atual in ["Mensal", "Anual"] or eh_admin
 
-    # --- BARRA LATERAL (SIDEBAR) ---
+    # --- BARRA LATERAL (SIDEBAR ATUALIZADA COM CHECKOUT REAL) ---
     with st.sidebar:
         st.markdown(f"### 👤 Olá, \n## {nome}")
         
@@ -106,14 +106,25 @@ else:
         
         st.divider()
         
-        # Bloqueio comercial: Usuários comuns precisam pagar (Mudar de plano agora é papel do Admin ou Gateway)
+        # Bloqueio comercial com Link Comercial Direto da Kiwify
         if not eh_premium:
             st.warning("Ganhe acesso às ferramentas de Caixa Reserva e Gestão de Contas Bancárias Corporativas.")
-            if st.button("Fazer Upgrade para Premium 🚀", use_container_width=True, type="primary"):
-                st.info("💳 Redirecionando para o checkout de pagamento... (Simulação de Gateway)")
+            
+            # TODO: Substitua o texto abaixo pelo link gerado na sua conta Kiwify
+            link_kiwify = "SEU_LINK_DA_KIWIFY_AQUI"
+            
+            st.markdown(
+                f'<a href="{link_kiwify}" target="_blank" style="text-decoration: none;">'
+                '<button style="width: 100%; background-color: #2ecc71; color: black; border: none; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: 0.3s; text-align: center;">'
+                'Fazer Upgrade para Premium 🚀'
+                '</button>'
+                '</a>', 
+                unsafe_allow_html=True
+            )
         elif eh_premium and not eh_admin:
             st.caption(f"Sua assinatura do plano {plano_atual} está ativa e renovada.")
                 
+        st.divider()
         if st.button("Sair do Sistema 🚪", use_container_width=True):
             st.session_state.logado = False
             st.rerun()
@@ -189,7 +200,7 @@ else:
             n_res = st.number_input("Adicionar Valor de Aporte à Reserva:", value=float(v_res))
             if st.button("Confirmar Atualização de Reserva", type="primary"):
                 atualizar_valor_inicial_reserva(nome, n_res)
-                st.success("Reserva atualizada com sucesso!")
+                st.success("Reserva updated com sucesso!")
                 st.rerun()
 
     # --- ABA 3: BANCOS DOS CLIENTES ---
