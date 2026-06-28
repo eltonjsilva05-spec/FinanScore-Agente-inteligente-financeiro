@@ -1,0 +1,114 @@
+import streamlit as st
+import pandas as pd
+from database import conectar
+
+# =========================
+# SEGURANÇA
+# =========================
+if "logado" not in st.session_state or not st.session_state["logado"]:
+    st.warning("🔐 Faça login para acessar o sistema")
+    st.stop()
+
+st.title("🧠 IA Banco Real")
+
+usuario = st.session_state["usuario"]
+
+conn = conectar()
+cursor = conn.cursor()
+
+# =========================
+# BUSCA DESPESAS
+# =========================
+cursor.execute("""
+    SELECT descricao, valor, substr(data,1,7)
+    FROM despesas
+    WHERE usuario = ?
+""", (usuario,))
+
+dados = cursor.fetchall()
+conn.close()
+
+if not dados:
+    st.info("Sem dados para análise")
+    st.stop()
+
+df = pd.DataFrame(dados, columns=["Categoria", "Valor", "Mes"])
+
+# =========================
+# TOTAL GERAL
+# =========================
+total = df["Valor"].sum()
+
+# =========================
+# MÉDIA MENSAL
+# =========================
+media = df.groupby("Mes")["Valor"].sum().mean()
+
+# =========================
+# GASTO MÊS ATUAL
+# =========================
+mes_atual = df["Mes"].max()
+gasto_atual = df[df["Mes"] == mes_atual]["Valor"].sum()
+
+# =========================
+# ANÁLISE 1: ANOMALIA
+# =========================
+st.subheader("🚨 Detecção de anomalias")
+
+if gasto_atual > media * 1.5:
+    st.error("🚨 Gasto muito acima do normal este mês!")
+elif gasto_atual > media * 1.2:
+    st.warning("⚠️ Gasto acima da média")
+else:
+    st.success("✅ Gasto dentro do padrão")
+
+st.metric("Média mensal", f"R$ {media:.2f}")
+st.metric("Gasto atual", f"R$ {gasto_atual:.2f}")
+
+# =========================
+# ANÁLISE 2: CATEGORIAS
+# =========================
+st.divider()
+st.subheader("📊 Análise por categoria")
+
+cat = df.groupby("Categoria")["Valor"].sum().sort_values(ascending=False)
+
+for c, v in cat.items():
+    perc = (v / total) * 100
+    st.write(f"**{c}** → R$ {v:.2f} ({perc:.1f}%)")
+
+# =========================
+# ANÁLISE 3: EXPLOSÃO DE GASTO
+# =========================
+st.divider()
+st.subheader("⚠️ Crescimento de gastos")
+
+if len(df["Mes"].unique()) >= 2:
+    meses = df.groupby("Mes")["Valor"].sum()
+
+    crescimento = meses.iloc[-1] - meses.iloc[-2]
+
+    if crescimento > media * 0.3:
+        st.error("🚨 Crescimento forte de gastos!")
+    elif crescimento > 0:
+        st.warning("⚠️ Gastos aumentando")
+    else:
+        st.success("📉 Gastos em queda")
+
+# =========================
+# ANÁLISE 4: PERFIL FINANCEIRO
+# =========================
+st.divider()
+st.subheader("🧾 Perfil financeiro")
+
+variacao = df.groupby("Mes")["Valor"].sum().std()
+
+if media > 0:
+    risco = variacao / media
+
+    if risco > 0.5:
+        st.error("🔴 Perfil: ALTO RISCO")
+    elif risco > 0.2:
+        st.warning("🟡 Perfil: MODERADO")
+    else:
+        st.success("🟢 Perfil: CONTROLADO")

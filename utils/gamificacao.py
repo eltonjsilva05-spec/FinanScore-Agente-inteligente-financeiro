@@ -1,0 +1,4 @@
+Bronze
+Prata
+Ouro
+Diamante

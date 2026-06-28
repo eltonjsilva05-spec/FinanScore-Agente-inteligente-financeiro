@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#2ecc71"          # Verde Esmeralda para os botões e destaques
+backgroundColor = "#0e1117"       # Fundo Escuro Profundo
+secondaryBackgroundColor = "#1f2937" # Cinza Escuro para os Cards e Sidebar
+textColor = "#f3f4f6"             # Texto Claro e Confortável
+font = "sans serif"
