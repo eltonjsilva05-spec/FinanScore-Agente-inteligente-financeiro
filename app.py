@@ -32,7 +32,7 @@ st.set_page_config(page_title="FinanScore - Gestão Inteligente", layout="wide")
 
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700&display=swap');
         html, body, [data-testid="stWidgetLabel"] { font-family: 'Inter', sans-serif !important; }
         .stButton>button[kind="primary"] { background-color: #2ecc71 !important; border: none !important; color: #000000 !important; font-weight: 600 !important; border-radius: 8px !important; transition: all 0.3s ease; }
         .stButton>button[kind="primary"]:hover { background-color: #27ae60 !important; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(46, 204, 113, 0.2); }
@@ -40,12 +40,27 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# 1. INICIALIZAÇÃO DOS ESTADOS GLOBAIS (Executado apenas uma vez no carregamento)
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
 if "id_em_edicao" not in st.session_state:
     st.session_state["id_em_edicao"] = None
 if "dados_edicao" not in st.session_state:
     st.session_state["dados_edicao"] = {}
+
+# Estas chaves globais NUNCA serão vinculadas como 'key' de nenhum widget para o Streamlit não as apagar
+if "db_meta_global" not in st.session_state:
+    st.session_state["db_meta_global"] = 10000.0
+if "db_aporte_global" not in st.session_state:
+    st.session_state["db_aporte_global"] = 300.0
+
+# Funções de callback para salvar o estado imediatamente ao digitar/clicar nas setas
+def atualizar_meta_callback():
+    st.session_state["db_meta_global"] = st.session_state["temp_meta"]
+
+def atualizar_aporte_callback():
+    st.session_state["db_aporte_global"] = st.session_state["temp_aporte"]
+
 
 if not st.session_state["logado"]:
     col_centro, _ = st.columns([2, 1])
@@ -91,7 +106,7 @@ else:
     # Buscar informações de plano atualizadas direto do Banco de Dados
     plano_atual = obter_plano_usuario(nome)
     eh_admin = (plano_atual == "Admin")
-    eh_premium = plano_atual in ["Mensal", "Anual", "Admin"] # Correção para incluir Admin no fluxo premium de forma explícita
+    eh_premium = plano_atual in ["Mensal", "Anual", "Admin"] 
 
     # --- BARRA LATERAL (SIDEBAR COM REDIRECIONAMENTO KIWIFY) ---
     with st.sidebar:
@@ -213,18 +228,170 @@ else:
                     excluir_transacao(t[0])
                     st.rerun()
 
-    # --- ABA 2: CAIXA RESERVA ---
+    # --- ABA 2: CAIXA RESERVA (RESOLVIDO DEFINITIVAMENTE COM CALLBACKS) ---
     with abas[2]:
         if not eh_premium: 
             st.error("🔒 Funcionalidade exclusiva para parceiros dos Planos Mensal ou Anual.")
         else:
-            st.markdown("### 🏦 Gerenciar Reserva Técnica")
-            v_res = obter_valor_inicial_reserva(nome)
-            n_res = st.number_input("Adicionar Valor de Aporte à Reserva:", value=float(v_res))
-            if st.button("Confirmar Atualização de Reserva", type="primary"):
-                atualizar_valor_inicial_reserva(nome, n_res)
-                st.success("Reserva atualizada com sucesso!")
+            st.markdown("### 🏦 Caixa Reserva & Simulações Avançadas")
+            st.markdown("Gerencie sua reserva técnica, configure metas de patrimônio e calcule a evolução automática de juros.")
+            st.markdown("---")
+
+            # Busca o valor atual guardado no banco de dados SQLite
+            v_res_banco = float(obter_valor_inicial_reserva(nome) or 0.0)
+
+            st.subheader("⚙️ Configurações da sua Meta")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # O valor atual é salvo diretamente no banco pelo botão, sem segredos
+                valor_atual = st.number_input(
+                    "Quanto você tem guardado hoje? (R$)", 
+                    min_value=0.0, 
+                    value=v_res_banco,
+                    step=100.0,
+                    key="temp_atual"
+                )
+            with col2:
+                # Usamos on_change para interceptar a alteração antes que o Streamlit mude de aba e limpe a memória
+                valor_meta = st.number_input(
+                    "Qual é a sua meta total? (R$)", 
+                    min_value=0.0, 
+                    value=float(st.session_state["db_meta_global"]),
+                    step=500.0,
+                    key="temp_meta",
+                    on_change=atualizar_meta_callback
+                )
+            with col3:
+                # Processo idêntico aplicado para manter o aporte mensal fixo
+                aporte_mensal = st.number_input(
+                    "Aporte Mensal Pretendido (R$)", 
+                    min_value=0.0, 
+                    value=float(st.session_state["db_aporte_global"]),
+                    step=50.0,
+                    key="temp_aporte",
+                    on_change=atualizar_aporte_callback
+                )
+
+            if st.button("Salvar Configurações da Reserva 💾", type="primary", key="btn_salvar_definitivo"):
+                # Salva o valor em dinheiro permanentemente no SQLite
+                atualizar_valor_inicial_reserva(nome, valor_atual)
+                # Garante que os estados globais peguem os últimos dados digitados
+                st.session_state["db_meta_global"] = valor_meta
+                st.session_state["db_aporte_global"] = aporte_mensal
+                st.success("Configurações aplicadas e salvas com absoluto sucesso!")
                 st.rerun()
+
+            st.markdown("---")
+
+            # Resgatamos os valores das chaves globais blindadas para as equações matemáticas
+            meta_calculo = float(st.session_state["db_meta_global"])
+            aporte_calculo = float(st.session_state["db_aporte_global"])
+
+            # 2. Linha de Progresso com Validação contra Divisão por Zero
+            if meta_calculo > 0:
+                progresso = min(valor_atual / meta_calculo, 1.0)
+                porcentagem_atingida = progresso * 100
+            else:
+                progresso = 1.0 if valor_atual >= 0 else 0.0
+                porcentagem_atingida = 100.0 if valor_atual >= 0 else 0.0
+
+            st.markdown("### 📊 Status da Meta Atingida")
+            st.progress(progresso)
+            
+            if meta_calculo == 0:
+                st.success(f"🎉 Você não definiu uma meta de longo prazo. Patrimônio atual em caixa: {formatar_brl(valor_atual)}")
+            elif porcentagem_atingida >= 100:
+                st.success(f"🎉 **Parabéns! Meta 100% Atingida!** Você possui {formatar_brl(valor_atual)} guardados de uma meta de {formatar_brl(meta_calculo)}")
+            else:
+                st.info(f"🎯 Você atingiu **{porcentagem_atingida:.1f}%** da sua meta corporativa. Faltam **{formatar_brl(max(meta_calculo - valor_atual, 0.0))}**.")
+
+            st.markdown("---")
+
+            # 3. Simulador de Crescimento (Juros Compostos)
+            st.subheader("📈 Simulador de Investimento Estratégico")
+            col_taxa, col_tempo = st.columns(2)
+            
+            with col_taxa:
+                taxa_anual = st.slider(
+                    "Taxa de Juros Anual Média (%)", 
+                    min_value=0.0, 
+                    max_value=25.0, 
+                    value=10.5, 
+                    step=0.1,
+                    key="slider_taxa"
+                )
+            with col_tempo:
+                meses = st.slider(
+                    "Horizonte de Tempo (Meses)", 
+                    min_value=1, 
+                    max_value=60, 
+                    value=12, 
+                    step=1,
+                    key="slider_meses"
+                )
+
+            # Estrutura condicional para taxas nulas
+            if taxa_anual > 0:
+                taxa_mensal = (1 + (taxa_anual / 100)) ** (1 / 12) - 1
+            else:
+                taxa_mensal = 0.0
+
+            saldo_total = valor_atual
+            total_investido = valor_atual
+            
+            historico = []
+            historico.append({
+                "Mês": 0,
+                "Total Investido (Sem Juros)": round(total_investido, 2),
+                "Evolução com Juros (Patrimônio)": round(saldo_total, 2)
+            })
+            
+            for mes in range(1, meses + 1):
+                if taxa_mensal > 0:
+                    saldo_total = saldo_total * (1 + taxa_mensal)
+                
+                saldo_total += aporte_calculo
+                total_investido += aporte_calculo
+                
+                historico.append({
+                    "Mês": mes,
+                    "Total Investido (Sem Juros)": round(total_investido, 2),
+                    "Evolução com Juros (Patrimônio)": round(saldo_total, 2)
+                })
+                
+            df_simulacao = pd.DataFrame(historico)
+
+            df_melted = df_simulacao.melt(
+                id_vars=["Mês"], 
+                value_vars=["Total Investido (Sem Juros)", "Evolução com Juros (Patrimônio)"],
+                var_name="Evolução Financeira", 
+                value_name="Valor"
+            )
+            
+            fig = px.line(
+                df_melted, 
+                x="Mês", 
+                y="Valor", 
+                color="Evolução Financeira",
+                markers=True,
+                color_discrete_map={
+                    "Total Investido (Sem Juros)": "#9ca3af",
+                    "Evolução com Juros (Patrimônio)": "#2ecc71"
+                },
+                template="plotly_dark"
+            )
+            fig.update_layout(hovermode="x unified", legend=dict(orientation="h", y=1.1))
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("### 📋 Resumo das Projeções Obtidas")
+            c_res1, c_res2, c_res3 = st.columns(3)
+            
+            rendimento_juros = max(saldo_total - total_investido, 0.0)
+            
+            c_res1.metric("Total Aportado (Do Bolso)", formatar_brl(total_investido))
+            c_res2.metric("Rendimento em Juros", formatar_brl(rendimento_juros))
+            c_res3.metric("Patrimônio Líquido Final", formatar_brl(saldo_total))
 
     # --- ABA 3: BANCOS DOS CLIENTES ---
     with abas[3]:
