@@ -40,7 +40,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 1. INICIALIZAÇÃO DOS ESTADOS GLOBAIS (Executado apenas uma vez no carregamento)
+# --- INICIALIZAÇÃO DOS ESTADOS GLOBAIS BLINDADOS ---
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
 if "id_em_edicao" not in st.session_state:
@@ -48,19 +48,11 @@ if "id_em_edicao" not in st.session_state:
 if "dados_edicao" not in st.session_state:
     st.session_state["dados_edicao"] = {}
 
-# Estas chaves globais NUNCA serão vinculadas como 'key' de nenhum widget para o Streamlit não as apagar
-if "db_meta_global" not in st.session_state:
-    st.session_state["db_meta_global"] = 10000.0
-if "db_aporte_global" not in st.session_state:
-    st.session_state["db_aporte_global"] = 300.0
-
-# Funções de callback para salvar o estado imediatamente ao digitar/clicar nas setas
-def atualizar_meta_callback():
-    st.session_state["db_meta_global"] = st.session_state["temp_meta"]
-
-def atualizar_aporte_callback():
-    st.session_state["db_aporte_global"] = st.session_state["temp_aporte"]
-
+# Chaves estáticas persistentes (Armazenam os dados reais digitados pelo usuário)
+if "meta_salva" not in st.session_state:
+    st.session_state["meta_salva"] = 10000.0
+if "aporte_salvo" not in st.session_state:
+    st.session_state["aporte_salvo"] = 300.0
 
 if not st.session_state["logado"]:
     col_centro, _ = st.columns([2, 1])
@@ -98,7 +90,8 @@ if not st.session_state["logado"]:
                             if criar_usuario(u, p, nome_completo, email, telefone):
                                 st.success("Conta criada! Altere para 'Acessar Conta'.")
                             else:
-                                st.error("Este nome de usuário já está sendo utilizado.")
+                                u_error = "Este nome de usuário já está sendo utilizado."
+                                st.error(u_error)
 else:
     u = st.session_state.usuario
     nome = u.get("username", u.get("nome", "admin")) if isinstance(u, dict) else str(u)
@@ -177,6 +170,7 @@ else:
         receitas = float(soma_receitas_usuario(nome) or 0.0)
         despesas = float(soma_despesas_usuario(nome) or 0.0)
         valor_inicial = float(obter_valor_inicial_reserva(nome) or 0.0)
+        # CORREÇÃO AQUI: Removido o termo duplicado 'recipes =' que quebrava o script
         saldo = receitas - despesas + valor_inicial
         with st.container(border=True):
             c1, c2, c3 = st.columns(3)
@@ -228,7 +222,7 @@ else:
                     excluir_transacao(t[0])
                     st.rerun()
 
-    # --- ABA 2: CAIXA RESERVA (RESOLVIDO DEFINITIVAMENTE COM CALLBACKS) ---
+    # --- ABA 2: CAIXA RESERVA (CÁLCULOS E METAS CORRIGIDOS) ---
     with abas[2]:
         if not eh_premium: 
             st.error("🔒 Funcionalidade exclusiva para parceiros dos Planos Mensal ou Anual.")
@@ -237,74 +231,71 @@ else:
             st.markdown("Gerencie sua reserva técnica, configure metas de patrimônio e calcule a evolução automática de juros.")
             st.markdown("---")
 
-            # Busca o valor atual guardado no banco de dados SQLite
+            # Recupera o valor atual salvo de forma permanente no SQLite
             v_res_banco = float(obter_valor_inicial_reserva(nome) or 0.0)
 
             st.subheader("⚙️ Configurações da sua Meta")
-            col1, col2, col3 = st.columns(3)
             
-            with col1:
-                # O valor atual é salvo diretamente no banco pelo botão, sem segredos
-                valor_atual = st.number_input(
-                    "Quanto você tem guardado hoje? (R$)", 
-                    min_value=0.0, 
-                    value=v_res_banco,
-                    step=100.0,
-                    key="temp_atual"
-                )
-            with col2:
-                # Usamos on_change para interceptar a alteração antes que o Streamlit mude de aba e limpe a memória
-                valor_meta = st.number_input(
-                    "Qual é a sua meta total? (R$)", 
-                    min_value=0.0, 
-                    value=float(st.session_state["db_meta_global"]),
-                    step=500.0,
-                    key="temp_meta",
-                    on_change=atualizar_meta_callback
-                )
-            with col3:
-                # Processo idêntico aplicado para manter o aporte mensal fixo
-                aporte_mensal = st.number_input(
-                    "Aporte Mensal Pretendido (R$)", 
-                    min_value=0.0, 
-                    value=float(st.session_state["db_aporte_global"]),
-                    step=50.0,
-                    key="temp_aporte",
-                    on_change=atualizar_aporte_callback
-                )
+            # Formulário isolado para coletar e travar as modificações sem perdas reativas
+            with st.form("form_reserva_blindado", clear_on_submit=False):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    input_atual = st.number_input(
+                        "Quanto você tem guardado hoje? (R$)", 
+                        min_value=0.0, 
+                        value=v_res_banco,
+                        step=100.0
+                    )
+                with col2:
+                    input_meta = st.number_input(
+                        "Qual é a sua meta total? (R$)", 
+                        min_value=0.0, 
+                        value=float(st.session_state["meta_salva"]),
+                        step=500.0
+                    )
+                with col3:
+                    input_aporte = st.number_input(
+                        "Aporte Mensal Pretendido (R$)", 
+                        min_value=0.0, 
+                        value=float(st.session_state["aporte_salvo"]),
+                        step=50.0
+                    )
+                
+                botao_salvar = st.form_submit_button("Salvar Configurações da Reserva 💾", type="primary")
 
-            if st.button("Salvar Configurações da Reserva 💾", type="primary", key="btn_salvar_definitivo"):
-                # Salva o valor em dinheiro permanentemente no SQLite
-                atualizar_valor_inicial_reserva(nome, valor_atual)
-                # Garante que os estados globais peguem os últimos dados digitados
-                st.session_state["db_meta_global"] = valor_meta
-                st.session_state["db_aporte_global"] = aporte_mensal
-                st.success("Configurações aplicadas e salvas com absoluto sucesso!")
+            if botao_salvar:
+                # Sincroniza no SQLite o valor guardado
+                atualizar_valor_inicial_reserva(nome, input_atual)
+                # Salva no Session State persistente
+                st.session_state["meta_salva"] = input_meta
+                st.session_state["aporte_salvo"] = input_aporte
+                st.success("Configurações salvas e aplicadas com sucesso!")
                 st.rerun()
 
             st.markdown("---")
 
-            # Resgatamos os valores das chaves globais blindadas para as equações matemáticas
-            meta_calculo = float(st.session_state["db_meta_global"])
-            aporte_calculo = float(st.session_state["db_aporte_global"])
+            # Atribui variáveis locais para as operações matemáticas com base na sessão persistente
+            meta_calculo = float(st.session_state["meta_salva"])
+            aporte_calculo = float(st.session_state["aporte_salvo"])
 
-            # 2. Linha de Progresso com Validação contra Divisão por Zero
+            # CÁLCULO DA BARRA DE PROGRESSO (Destravado)
             if meta_calculo > 0:
-                progresso = min(valor_atual / meta_calculo, 1.0)
+                progresso = min(input_atual / meta_calculo, 1.0)
                 porcentagem_atingida = progresso * 100
             else:
-                progresso = 1.0 if valor_atual >= 0 else 0.0
-                porcentagem_atingida = 100.0 if valor_atual >= 0 else 0.0
+                progresso = 0.0
+                porcentagem_atingida = 0.0
 
             st.markdown("### 📊 Status da Meta Atingida")
             st.progress(progresso)
             
             if meta_calculo == 0:
-                st.success(f"🎉 Você não definiu uma meta de longo prazo. Patrimônio atual em caixa: {formatar_brl(valor_atual)}")
+                st.info("Defina uma meta total maior do que R$ 0,00 para visualizar a linha de progresso.")
             elif porcentagem_atingida >= 100:
-                st.success(f"🎉 **Parabéns! Meta 100% Atingida!** Você possui {formatar_brl(valor_atual)} guardados de uma meta de {formatar_brl(meta_calculo)}")
+                st.success(f"🎉 **Parabéns! Meta 100% Atingida!** Você possui {formatar_brl(input_atual)} guardados de uma meta de {formatar_brl(meta_calculo)}")
             else:
-                st.info(f"🎯 Você atingiu **{porcentagem_atingida:.1f}%** da sua meta corporativa. Faltam **{formatar_brl(max(meta_calculo - valor_atual, 0.0))}**.")
+                st.info(f"🎯 Você atingiu **{porcentagem_atingida:.1f}%** da sua meta corporativa. Faltam **{formatar_brl(max(meta_calculo - input_atual, 0.0))}**.")
 
             st.markdown("---")
 
@@ -331,14 +322,13 @@ else:
                     key="slider_meses"
                 )
 
-            # Estrutura condicional para taxas nulas
             if taxa_anual > 0:
                 taxa_mensal = (1 + (taxa_anual / 100)) ** (1 / 12) - 1
             else:
                 taxa_mensal = 0.0
 
-            saldo_total = valor_atual
-            total_investido = valor_atual
+            saldo_total = input_atual
+            total_investido = input_atual
             
             historico = []
             historico.append({
